@@ -83,6 +83,7 @@ import socket
 import asyncore
 import asynchat
 import base64
+import re
 
 __all__ = ["SMTPServer","DebuggingServer","PureProxy","MailmanProxy"]
 
@@ -113,7 +114,7 @@ class SMTPChannel(asynchat.async_chat):
     COMMAND = 0
     DATA = 1
 
-    def __init__(self, server, conn, addr, require_authentication=False, credential_validator=None):
+    def __init__(self, server, conn, addr, require_authentication=False, credential_validator=None, validate_rcpt=False, rcpt_hosts=None):
         asynchat.async_chat.__init__(self, conn)
         self.require_authentication = require_authentication
         self.authenticating = False
@@ -121,7 +122,9 @@ class SMTPChannel(asynchat.async_chat):
         self.username = None
         self.password = None
         self.credential_validator = credential_validator
-        
+        self.validate_rcpt = validate_rcpt
+        self.rcpt_hosts = rcpt_hosts
+
         self.__server = server
         self.__conn = conn
         self.__addr = addr
@@ -346,6 +349,10 @@ class SMTPChannel(asynchat.async_chat):
         if not address:
             self.push('501 Syntax: RCPT TO: <address>')
             return
+        if self.validate_rcpt:
+            if re.match( r'%s' % self.rcpt_hosts, address.lower().split("@")[1], re.I) is None:
+                self.push('554 Relay access denied')
+                print >> DEBUGSTREAM, 'rejected rcpt', address
         self.__rcpttos.append(address)
         print >> DEBUGSTREAM, 'recips:', self.__rcpttos
         self.push('250 Ok')
@@ -374,7 +381,7 @@ class SMTPChannel(asynchat.async_chat):
 
 
 class SMTPServer(asyncore.dispatcher):
-    def __init__(self, localaddr, remoteaddr, require_authentication=False, credentials={'username':'', 'password':''}):
+    def __init__(self, localaddr, remoteaddr, require_authentication=False, credentials={'username':'', 'password':''}, validate_rcpt=False, rcpt_hosts=None):
         self._localaddr = localaddr
         self._remoteaddr = remoteaddr
         self.require_authentication = require_authentication
@@ -383,6 +390,9 @@ class SMTPServer(asyncore.dispatcher):
         else:
             self.credential_validator = None
         asyncore.dispatcher.__init__(self)
+        self.validate_rcpt = validate_rcpt
+        if validate_rcpt:
+            self.rcpt_hosts = rcpt_hosts
 
         try:
             self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -411,6 +421,8 @@ class SMTPServer(asyncore.dispatcher):
                                   addr, 
                                   require_authentication=self.require_authentication, 
                                   credential_validator=self.credential_validator,
+                                  validate_rcpt=self.validate_rcpt,
+                                  rcpt_hosts=self.rcpt_hosts
                                   )
 
     # API for "doing something useful with the message"
