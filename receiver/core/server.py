@@ -166,15 +166,21 @@ class SMTPReceiver(smtpd.SMTPServer):
         """
         self.credentials = None
         self.authenabled = False
-        
+        self.validate_rcpt = False
+        self.rcpt_hosts = None
+ 
         confpath = os.path.dirname(os.path.realpath(__file__)) + "/../../../../../shiva.conf"
         config = ConfigParser.ConfigParser()
         config.read(confpath)
         self.authenabled = config.getboolean('receiver', 'authenabled')
+        self.validate_rcpt = config.getboolean('receiver', 'validatercpt')
         
         if self.authenabled:
             self.credentials = {'username' : config.get('receiver', 'smtpuser'), 'password' : config.get('receiver', 'smtppasswd')}
         
+        if self.validate_rcpt:
+            self.rcpt_hosts = config.get('receiver', 'rcpt_hosts')
+
         self.host = host
         self.port = port
         smtpd.SMTPServer.__init__(
@@ -182,7 +188,9 @@ class SMTPReceiver(smtpd.SMTPServer):
                                   (self.host, self.port), 
                                   None, 
                                   require_authentication=self.authenabled, 
-                                  credentials=self.credentials
+                                  credentials=self.credentials,
+                                  validate_rcpt=self.validate_rcpt,
+                                  rcpt_hosts=self.rcpt_hosts
                                   )
         #SMTPServer.__init__(self, (self.host, self.port), None)
         
