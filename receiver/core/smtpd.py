@@ -353,6 +353,7 @@ class SMTPChannel(asynchat.async_chat):
             if re.match( r'%s' % self.rcpt_hosts, address.lower().split("@")[1], re.I) is None:
                 self.push('554 Relay access denied')
                 print >> DEBUGSTREAM, 'rejected rcpt', address
+                return
         self.__rcpttos.append(address)
         print >> DEBUGSTREAM, 'recips:', self.__rcpttos
         self.push('250 Ok')
